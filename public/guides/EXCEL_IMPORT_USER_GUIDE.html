@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment History Excel Import - User Guide</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 36px;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 18px;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section h2 {
+        color: #667eea;
+        font-size: 28px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .section h3 {
+        color: #764ba2;
+        font-size: 22px;
+        margin: 20px 0 10px;
+      }
+
+      .step-box {
+        background: #f8f9ff;
+        border-left: 4px solid #667eea;
+        padding: 20px;
+        margin: 15px 0;
+        border-radius: 8px;
+      }
+
+      .step-box h4 {
+        color: #667eea;
+        margin-bottom: 10px;
+        font-size: 18px;
+      }
+
+      .info-box {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+      }
+
+      .warning-box {
+        background: #fff8e1;
+        border: 1px solid #ffe082;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+      }
+
+      .success-box {
+        background: #e8f5e9;
+        border: 1px solid #a5d6a7;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+
+      th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+      }
+
+      tr:hover {
+        background: #f5f5f5;
+      }
+
+      .code-block {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 15px 0;
+        font-family: "Courier New", monospace;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .feature-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+      }
+
+      .feature-card h4 {
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+
+      .feature-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+      }
+
+      ul {
+        margin-left: 20px;
+        margin-top: 10px;
+      }
+
+      li {
+        margin: 8px 0;
+      }
+
+      .button-demo {
+        display: inline-block;
+        padding: 12px 24px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        text-decoration: none;
+        margin: 10px 5px;
+        transition: transform 0.3s ease;
+      }
+
+      .button-demo:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      @media print {
+        body {
+          background: white;
+        }
+        .container {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>💰 Payment History Excel Import</h1>
+        <p>Complete User Guide for Bulk Payment Import</p>
+      </div>
+
+      <div class="content">
+        <!-- Installation Section -->
+        <div class="section">
+          <h2>📦 Installation</h2>
+          <div class="warning-box">
+            <strong>⚠️ Important:</strong> Install the required package before
+            using this feature.
+          </div>
+          <div class="code-block">
+            cd client<br />
+            npm install xlsx
+          </div>
+          <p>After installation, restart your development server.</p>
+        </div>
+
+        <!-- Features Section -->
+        <div class="section">
+          <h2>✨ Features</h2>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-icon">📥</div>
+              <h4>Excel Upload</h4>
+              <p>Upload .xlsx or .xls files directly</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">✓</div>
+              <h4>Data Validation</h4>
+              <p>Check for errors before importing</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">⚡</div>
+              <h4>Bulk Import</h4>
+              <p>Import hundreds of records at once</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🎯</div>
+              <h4>Auto-Matching</h4>
+              <p>Automatically links to existing members</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Excel Format Section -->
+        <div class="section">
+          <h2>📋 Excel Format</h2>
+          <p>
+            Your Excel file must have these columns in the first row (header):
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Column Name</th>
+                <th>Required</th>
+                <th>Format</th>
+                <th>Example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Name</td>
+                <td>✓ Yes</td>
+                <td>Text</td>
+                <td>John Doe</td>
+              </tr>
+              <tr>
+                <td>Mobile Number</td>
+                <td>✓ Yes</td>
+                <td>Text with +91</td>
+                <td>+91-9876543210</td>
+              </tr>
+              <tr>
+                <td>Purchase Date</td>
+                <td>✓ Yes</td>
+                <td>Date (YYYY-MM-DD)</td>
+                <td>2024-01-15</td>
+              </tr>
+              <tr>
+                <td>Invoice Number</td>
+                <td>✓ Yes</td>
+                <td>Text</td>
+                <td>INV-2024-001</td>
+              </tr>
+              <tr>
+                <td>Payment Mode</td>
+                <td>✓ Yes</td>
+                <td>upi/cash/card</td>
+                <td>upi</td>
+              </tr>
+              <tr>
+                <td>Amount</td>
+                <td>✓ Yes</td>
+                <td>Number</td>
+                <td>5000</td>
+              </tr>
+              <tr>
+                <td>Packages</td>
+                <td>✓ Yes</td>
+                <td>Text</td>
+                <td>Basic Membership Plan Yearly</td>
+              </tr>
+              <tr>
+                <td>Activation Date</td>
+                <td>✓ Yes</td>
+                <td>Date (YYYY-MM-DD)</td>
+                <td>2024-01-20</td>
+              </tr>
+              <tr>
+                <td>Expiry Date</td>
+                <td>✓ Yes</td>
+                <td>Date (YYYY-MM-DD)</td>
+                <td>2025-01-20</td>
+              </tr>
+              <tr>
+                <td>Package Duration</td>
+                <td>Optional</td>
+                <td>Text</td>
+                <td>12 months</td>
+              </tr>
+              <tr>
+                <td>Sales Rep</td>
+                <td>Optional</td>
+                <td>Text</td>
+                <td>Sales Team</td>
+              </tr>
+              <tr>
+                <td>Customer Rep</td>
+                <td>Optional</td>
+                <td>Text</td>
+                <td>Admin</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Step by Step Guide -->
+        <div class="section">
+          <h2>🚀 How to Import</h2>
+
+          <div class="step-box">
+            <h4>Step 1: Download Demo Template</h4>
+            <p>
+              Click the <strong>"Demo Template"</strong> button in the Payment
+              History page. This downloads a sample Excel file with the correct
+              format and example data.
+            </p>
+          </div>
+
+          <div class="step-box">
+            <h4>Step 2: Prepare Your Data</h4>
+            <ul>
+              <li>Open the demo template in Excel or Google Sheets</li>
+              <li>Replace the sample data with your actual payment records</li>
+              <li>Keep the header row (first row) exactly as is</li>
+              <li>Make sure all required columns have values</li>
+              <li>Use the same date format (YYYY-MM-DD)</li>
+            </ul>
+          </div>
+
+          <div class="step-box">
+            <h4>Step 3: Open Import Dialog</h4>
+            <p>
+              Click the <strong>"Import Excel"</strong> button in the Payment
+              History page header.
+            </p>
+          </div>
+
+          <div class="step-box">
+            <h4>Step 4: Upload Excel File</h4>
+            <ul>
+              <li>Click on the upload area or drag & drop your Excel file</li>
+              <li>Supported formats: .xlsx and .xls</li>
+              <li>The system will automatically read and parse your file</li>
+              <li>You'll see the number of records loaded</li>
+            </ul>
+          </div>
+
+          <div class="step-box">
+            <h4>Step 5: Validate Data</h4>
+            <p>
+              Click <strong>"Validate Data"</strong> button to check for errors:
+            </p>
+            <ul>
+              <li>✅ Shows valid records count</li>
+              <li>❌ Lists invalid records with specific issues</li>
+              <li>⚠️ Shows warnings (e.g., member not found)</li>
+              <li>Fix any errors in your Excel file and re-upload if needed</li>
+            </ul>
+          </div>
+
+          <div class="step-box">
+            <h4>Step 6: Import to Database</h4>
+            <p>Click <strong>"Import to Database"</strong> button:</p>
+            <ul>
+              <li>Confirm the import when prompted</li>
+              <li>Wait for the import to complete</li>
+              <li>See success/failure report for each record</li>
+              <li>Payment history page will refresh automatically</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- What Happens Section -->
+        <div class="section">
+          <h2>⚙️ What the System Does</h2>
+          <div class="info-box">
+            <strong>Automatic Processing:</strong>
+            <ul>
+              <li>✓ Searches for existing members by mobile number</li>
+              <li>✓ Links payment records to member accounts if found</li>
+              <li>✓ Generates unique receipt numbers for each payment</li>
+              <li>✓ Stores all Excel data fields in the database</li>
+              <li>✓ Sets payment status as "Paid" for imported records</li>
+              <li>✓ Creates audit trail with import timestamp</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Validation Rules Section -->
+        <div class="section">
+          <h2>✓ Validation Rules</h2>
+          <h3>Required Field Checks</h3>
+          <ul>
+            <li>Name must not be empty</li>
+            <li>Mobile number must not be empty</li>
+            <li>Amount must be a valid number greater than 0</li>
+          </ul>
+
+          <h3>Date Validation</h3>
+          <ul>
+            <li>
+              Purchase Date, Activation Date, and Expiry Date must be valid
+              dates
+            </li>
+            <li>Preferred format: YYYY-MM-DD (e.g., 2024-01-15)</li>
+            <li>Alternative formats accepted: DD/MM/YYYY, MM/DD/YYYY</li>
+          </ul>
+
+          <h3>Warnings (Non-blocking)</h3>
+          <ul>
+            <li>Member not found in database (record will still be created)</li>
+            <li>Missing optional fields (Sales Rep, Customer Rep)</li>
+          </ul>
+        </div>
+
+        <!-- Common Issues Section -->
+        <div class="section">
+          <h2>🔧 Troubleshooting</h2>
+
+          <h3>❌ "Failed to read Excel file"</h3>
+          <div class="warning-box">
+            <strong>Solutions:</strong>
+            <ul>
+              <li>Ensure file is in .xlsx or .xls format (not .csv)</li>
+              <li>Check that the file is not corrupted</li>
+              <li>Close the Excel file if it's open in another program</li>
+              <li>Re-download the demo template and try again</li>
+            </ul>
+          </div>
+
+          <h3>⚠️ Validation Errors</h3>
+          <div class="warning-box">
+            <strong>Solutions:</strong>
+            <ul>
+              <li>Check all required columns are present in the header row</li>
+              <li>Verify column names match exactly (case-sensitive)</li>
+              <li>Ensure dates are in valid format</li>
+              <li>Check that Amount column contains only numbers</li>
+              <li>Remove any empty rows at the end of the sheet</li>
+            </ul>
+          </div>
+
+          <h3>🚫 Import Fails</h3>
+          <div class="warning-box">
+            <strong>Solutions:</strong>
+            <ul>
+              <li>Make sure you're logged in as an admin user</li>
+              <li>Check that the backend server is running</li>
+              <li>Verify network connection to the server</li>
+              <li>Check browser console for specific error messages</li>
+            </ul>
+          </div>
+
+          <h3>📱 Member Not Found Warning</h3>
+          <div class="info-box">
+            <strong>This is normal!</strong> If a payment record's mobile number
+            doesn't match any existing member in your database, the payment will
+            still be created with the data from your Excel file. You can link it
+            to a member later.
+          </div>
+        </div>
+
+        <!-- Tips Section -->
+        <div class="section">
+          <h2>💡 Pro Tips</h2>
+          <div class="success-box">
+            <ul>
+              <li>✓ Always validate data before importing</li>
+              <li>✓ Start with a small batch (10-20 records) to test</li>
+              <li>✓ Keep a backup of your original Excel file</li>
+              <li>✓ Use consistent date format throughout your file</li>
+              <li>✓ Double-check mobile numbers are correct</li>
+              <li>✓ Remove any formulas from Excel cells (paste as values)</li>
+              <li>✓ Ensure no merged cells in your Excel sheet</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Support Section -->
+        <div class="section">
+          <h2>📞 Need Help?</h2>
+          <p>If you encounter any issues:</p>
+          <ol>
+            <li>Check the browser console (F12) for error messages</li>
+            <li>Verify the backend server is running and accessible</li>
+            <li>Review the validation results for specific error details</li>
+            <li>Contact your system administrator with error screenshots</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

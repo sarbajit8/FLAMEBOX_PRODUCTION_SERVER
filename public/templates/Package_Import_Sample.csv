@@ -1,0 +1,26 @@
+Package Name,Package Type,Package Category,Duration value,Duration unit,Original Price,Discount Type,Discount Value,Freezable,Package Status,Description,Sessions,Session Count,Badge
+FB Fitness Fantasia Half Yearly,Membership,Basic,6,Months,4200,flat,0,Yes,Active,Half yearly membership with basic gym access,Unlimited,,Popular
+FB Fitness Fantasia Yearly,Membership,Basic,12,Months,7600,percentage,25,Yes,Active,Yearly membership with 25% discount,Unlimited,,Best Value
+FB Fitness Extremos Half Yearly,Membership,Basic,6,Months,6000,flat,0,Yes,Active,Premium half yearly membership,Unlimited,,
+FB Fitness Extremos Yearly,Membership,Basic,12,Months,10000,percentage,25,Yes,Active,Premium yearly membership with discount,Unlimited,,
+FB Zumba Delights Half Yearly,Membership,Basic,6,Months,4200,flat,2100,Yes,Active,Zumba classes half yearly,Unlimited,,
+FB Zumba Delights Yearly,Membership,Basic,12,Months,6600,percentage,25,Yes,Active,Zumba classes yearly,Unlimited,,
+FB Visitors I,Classes,Basic,1,Months,700,flat,0,No,Active,Single visit pass,1,1,
+FB Visitors II,Classes,Basic,1,Months,1000,flat,0,No,Active,Double visit pass,2,2,
+FB Fitness Fantasia Half Yearly Group,Membership,Basic,6,Months,3600,flat,0,Yes,Active,Group membership package,Unlimited,,
+FB Fitness Fantasia Monthly Fees,Membership,Basic,1,Months,800,flat,0,No,Active,Monthly membership fee,Unlimited,,
+FlameBox 1:1,Personal Training,Basic,1,Months,2000,flat,1000,No,Active,One-on-one personal training,4,4,
+Lifetime Membership Registration,Membership,Basic,999,Years,500,flat,0,No,Active,One-time registration fee,Unlimited,,
+FB Fantasia Monthly 2023,Membership,Basic,1,Months,1000,percentage,50,No,Active,Monthly membership 2023 offer,Unlimited,,
+FB Fantasia Monthly 2023 (C),Membership,Basic,1,Months,900,percentage,50,No,Active,Monthly membership 2023 (Corporate),Unlimited,,
+FB Fantasia Monthly 2023 (G),Membership,Basic,1,Months,800,percentage,50,No,Active,Monthly membership 2023 (Group),Unlimited,,
+FB Fantasia Quarterly 2023,Membership,Basic,3,Months,2800,percentage,50,No,Active,Quarterly membership 2023,Unlimited,,
+FB Fantasia Quarterly 2023 (C),Membership,Basic,3,Months,2500,percentage,50,No,Active,Quarterly membership 2023 (Corporate),Unlimited,,
+FB Fantasia Quarterly 2023 (G),Membership,Basic,3,Months,2200,percentage,50,No,Active,Quarterly membership 2023 (Group),Unlimited,,
+FB Fantasia Half-Yearly 2023,Membership,Basic,6,Months,5000,percentage,50,Yes,Active,Half-yearly membership 2023,Unlimited,,Best Deal
+FB Fantasia Half-Yearly 2023 (C),Membership,Basic,6,Months,4700,percentage,50,Yes,Active,Half-yearly membership 2023 (Corporate),Unlimited,,
+FB Fantasia Half-Yearly 2023 (G),Membership,Basic,6,Months,4300,percentage,50,Yes,Active,Half-yearly membership 2023 (Group),Unlimited,,
+FB Fantasia Yearly 2023,Membership,Basic,12,Months,9000,percentage,50,Yes,Active,Yearly membership 2023,Unlimited,,Most Popular
+FB Fantasia Yearly 2023 (C),Membership,Basic,12,Months,8500,percentage,50,Yes,Active,Yearly membership 2023 (Corporate),Unlimited,,
+FB Fantasia Yearly 2023 (G),Membership,Basic,12,Months,7800,percentage,50,Yes,Active,Yearly membership 2023 (Group),Unlimited,,
+FB Extremos Monthly 2023,Membership,Basic,1,Months,1400,percentage,50,No,Active,Premium monthly membership 2023,Unlimited,,

@@ -1,0 +1,2242 @@
+const Member = require("../../models/admin/Members");
+const Package = require("../../models/admin/Packages");
+const PaymentHistory = require("../../models/admin/PaymentHistory");
+const {
+  sendPaymentReceiptEmail,
+  sendPackageExpiryEmail,
+  sendPackageExpirySMS,
+  sendPackageRenewalEmail,
+  sendPackageExtensionEmail,
+  sendPackageFreezeEmail,
+} = require("../../helpers/email");
+
+// ============================================
+// CREATE MEMBER
+// ============================================
+const createMember = async (req, res) => {
+  try {
+    console.log("➕ Creating new member...");
+    console.log("Request body:", req.body);
+
+    const {
+      registrationNumber,
+      fullName,
+      email,
+      phoneNumber,
+      alternatePhone,
+      dateOfBirth,
+      gender,
+      address,
+      emergencyContact,
+      photo,
+      cprNumber,
+      joiningDate,
+      dueDate,
+      packages,
+      vaccinationStatus,
+      vaccinationDetails,
+      medicalConditions,
+      bloodGroup,
+      height,
+      weight,
+      referredBy,
+      salesRepresentative,
+      notes,
+      tags,
+      assignedTrainer,
+    } = req.body;
+
+    // Validate required fields
+    if (!fullName || fullName.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        error: "Full name is required",
+      });
+    }
+
+    if (!phoneNumber || phoneNumber.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        error: "Phone number is required",
+      });
+    }
+
+    // Validate email format if provided
+    if (email && email.trim() !== "") {
+      const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          error: "Please provide a valid email address",
+        });
+      }
+    }
+
+    // Check if email already exists
+    const existingMember = await Member.findOne({ email, isDeleted: false });
+    if (existingMember) {
+      return res.status(400).json({
+        success: false,
+        error: "Member with this email already exists",
+      });
+    }
+
+    // Check if phone number already exists
+    const existingPhone = await Member.findOne({
+      phoneNumber,
+      isDeleted: false,
+    });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        error: "Member with this phone number already exists",
+      });
+    }
+
+    // Validate and process packages
+    const processedPackages = [];
+    if (packages && packages.length > 0) {
+      for (let i = 0; i < packages.length; i++) {
+        const pkg = packages[i];
+
+        // Verify package exists
+        const packageExists = await Package.findById(pkg.packageId);
+        if (!packageExists) {
+          return res.status(400).json({
+            success: false,
+            error: `Package with ID ${pkg.packageId} not found`,
+          });
+        }
+
+        processedPackages.push({
+          packageId: pkg.packageId,
+          packageName: pkg.packageName || packageExists.packageName,
+          packageType: pkg.packageType || packageExists.packageType,
+          startDate: pkg.startDate,
+          endDate: pkg.endDate,
+          amount: pkg.amount,
+          discount: pkg.discount || 0,
+          discountType: pkg.discountType || "flat",
+          finalAmount: pkg.finalAmount || pkg.amount - (pkg.discount || 0),
+          paymentStatus: pkg.paymentStatus || "Pending",
+          paymentMethod: pkg.paymentMethod || "Cash",
+          transactionId: pkg.transactionId || "",
+          packageStatus: pkg.packageStatus || "Active",
+          isPrimary: i === 0 ? true : pkg.isPrimary || false,
+          autoRenew: pkg.autoRenew || false,
+          notes: pkg.notes || "",
+        });
+      }
+    }
+
+    // Auto-assign trainer if current user is trainer
+    let finalAssignedTrainer = assignedTrainer;
+    if (req.user?.role === "trainer" && !assignedTrainer) {
+      finalAssignedTrainer = req.user.id;
+      console.log("🔗 Auto-assigning trainer:", req.user.id);
+    }
+
+    // Create member data
+    const memberData = {
+      fullName,
+      email,
+      phoneNumber,
+      alternatePhone,
+      dateOfBirth,
+      gender,
+      address,
+      emergencyContact,
+      photo,
+      cprNumber,
+      joiningDate: joiningDate || new Date(),
+      dueDate: dueDate || null,
+      packages: processedPackages,
+      vaccinationStatus: vaccinationStatus || "Not Vaccinated",
+      vaccinationDetails,
+      medicalConditions: medicalConditions || [],
+      bloodGroup: bloodGroup || "Unknown",
+      height,
+      weight,
+      referredBy,
+      salesRepresentative,
+      notes,
+      tags: tags || [],
+      assignedTrainer: finalAssignedTrainer,
+      totalPaid: req.body.totalPaid || 0,
+      totalPending: req.body.totalPending || 0,
+      paymentDate: req.body.paymentDate || null,
+      documents: req.body.documents || [],
+    };
+
+    // Add registration number if provided (otherwise auto-generated by pre-save hook)
+    if (registrationNumber && registrationNumber.trim()) {
+      memberData.registrationNumber = registrationNumber.trim().toUpperCase();
+      console.log(
+        "📝 Using manual registration number:",
+        memberData.registrationNumber
+      );
+    }
+
+    // Create new member (registration number will be auto-generated)
+    const newMember = await Member.create(memberData);
+
+    // Add initial payment if first package is paid
+    if (
+      processedPackages.length > 0 &&
+      processedPackages[0].paymentStatus === "Paid"
+    ) {
+      await newMember.addPayment({
+        date: new Date(),
+        amount: processedPackages[0].finalAmount,
+        paymentMethod: processedPackages[0].paymentMethod,
+        transactionId: processedPackages[0].transactionId,
+        packageName: processedPackages[0].packageName,
+        status: "Success",
+        notes: "Initial payment",
+      });
+
+      // Create payment history record
+      try {
+        const paymentRecord = await PaymentHistory.create({
+          memberId: newMember._id,
+          memberName: newMember.fullName,
+          memberEmail: newMember.email,
+          memberPhone: newMember.phoneNumber,
+          packageId: processedPackages[0].packageId,
+          packageName: processedPackages[0].packageName,
+          packageType: processedPackages[0].packageType,
+          transactionType: "New Membership",
+          amount: processedPackages[0].amount,
+          discount: processedPackages[0].discount,
+          finalAmount: processedPackages[0].finalAmount,
+          paymentStatus: "Paid",
+          paymentMethod: processedPackages[0].paymentMethod,
+          paymentDate: new Date(),
+          transactionId: processedPackages[0].transactionId,
+          membershipStartDate: processedPackages[0].startDate,
+          membershipEndDate: processedPackages[0].endDate,
+          notes: "Initial membership payment",
+          collectedBy: {
+            userId: req.user?.id,
+            userName: req.user?.fullName || req.user?.email,
+            role: req.user?.role,
+          },
+        });
+        console.log(
+          "💾 Payment history record created:",
+          paymentRecord.receiptNumber
+        );
+      } catch (paymentError) {
+        console.error(
+          "⚠️ Failed to create payment history record:",
+          paymentError
+        );
+      }
+    }
+
+    console.log(
+      `✅ Member created: ${newMember.fullName} (${newMember.registrationNumber})`
+    );
+
+    // Send welcome email with payment receipt
+    if (newMember.email) {
+      const totalPaid = newMember.totalPaid || 0;
+      const totalPending = newMember.totalPending || 0;
+      const isFullyPaid = totalPending === 0 && totalPaid > 0;
+
+      await sendPaymentReceiptEmail(newMember.email, {
+        fullName: newMember.fullName,
+        registrationNumber: newMember.registrationNumber,
+        amountPaid: totalPaid,
+        totalPaid: totalPaid,
+        totalPending: totalPending,
+        paymentStatus: isFullyPaid
+          ? "Paid"
+          : totalPaid > 0
+          ? "Partial"
+          : "Pending",
+        paymentDate: new Date().toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        packageName:
+          newMember.currentPackage?.packageName ||
+          processedPackages[0]?.packageName ||
+          "N/A",
+        isFullyPaid: isFullyPaid,
+      });
+      console.log(
+        "📧 Welcome email with payment invoice sent to:",
+        newMember.email
+      );
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Member created successfully",
+      member: newMember,
+    });
+  } catch (error) {
+    console.error("❌ Error creating member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to create member",
+    });
+  }
+};
+
+// ============================================
+// GET ALL MEMBERS
+// ============================================
+const getAllMembers = async (req, res) => {
+  try {
+    console.log("📋 Fetching all members...");
+    console.log("Query params:", req.query);
+    console.log("User role:", req.user?.role);
+    console.log("User ID:", req.user?.id);
+
+    // Build filter
+    const filter = { isDeleted: false };
+
+    // Role-based filtering: Trainers can only see their assigned members
+    if (req.user?.role === "trainer") {
+      filter.assignedTrainer = req.user.id;
+      console.log(
+        "🔒 Trainer access: Filtering by assigned trainer ID:",
+        req.user.id
+      );
+    }
+
+    // Filter by vaccination status
+    if (req.query.vaccinationStatus) {
+      filter.vaccinationStatus = req.query.vaccinationStatus;
+    }
+
+    // Filter by package status
+    if (req.query.packageStatus) {
+      filter["packages.packageStatus"] = req.query.packageStatus;
+    }
+
+    // Search by name, email, phone, or registration number
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, "i");
+      filter.$or = [
+        { fullName: searchRegex },
+        { email: searchRegex },
+        { phoneNumber: searchRegex },
+        { registrationNumber: searchRegex },
+      ];
+    }
+
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Sort
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+
+    // Fetch members
+    const members = await Member.find(filter)
+      .populate("assignedTrainer", "fullName email userName")
+      .populate("packages.packageId", "packageName packageType freezable")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Get total count for pagination
+    const totalMembers = await Member.countDocuments(filter);
+    const totalPages = Math.ceil(totalMembers / limit);
+
+    console.log(`✅ Found ${members.length} members (Total: ${totalMembers})`);
+    if (req.user?.role === "trainer") {
+      console.log(
+        "📊 Trainer-specific members:",
+        members.map((m) => ({
+          id: m._id,
+          name: m.fullName,
+          assignedTrainer: m.assignedTrainer,
+        }))
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      count: members.length,
+      totalMembers,
+      totalPages,
+      currentPage: page,
+      members,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching members:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch members",
+    });
+  }
+};
+
+// ============================================
+// GET MEMBER BY ID
+// ============================================
+const getMemberById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🔍 Fetching member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false })
+      .populate("assignedTrainer", "name email phoneNumber")
+      .populate("packages.packageId", "packageName packageType freezable")
+      .lean();
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    console.log(`✅ Member found: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch member",
+    });
+  }
+};
+
+// ============================================
+// GET MEMBER BY REGISTRATION NUMBER
+// ============================================
+const getMemberByRegistrationNumber = async (req, res) => {
+  try {
+    const { registrationNumber } = req.params;
+    console.log(
+      `🔍 Fetching member by registration number: ${registrationNumber}`
+    );
+
+    const member = await Member.findOne({
+      registrationNumber: registrationNumber.toUpperCase(),
+      isDeleted: false,
+    })
+      .populate("assignedTrainer", "name email")
+      .populate("packages.packageId", "packageName packageType freezable")
+      .lean();
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch member",
+    });
+  }
+};
+
+// ============================================
+// UPDATE MEMBER
+// ============================================
+const updateMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`📝 Updating member ID: ${id}`);
+    console.log("Update data:", req.body);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    // Check if email is being changed and if it's already in use
+    if (req.body.email && req.body.email !== member.email) {
+      const existingEmail = await Member.findOne({
+        email: req.body.email,
+        isDeleted: false,
+        _id: { $ne: id },
+      });
+
+      if (existingEmail) {
+        return res.status(400).json({
+          success: false,
+          error: "Email already in use by another member",
+        });
+      }
+    }
+
+    // Check if phone is being changed and if it's already in use
+    if (req.body.phoneNumber && req.body.phoneNumber !== member.phoneNumber) {
+      const existingPhone = await Member.findOne({
+        phoneNumber: req.body.phoneNumber,
+        isDeleted: false,
+        _id: { $ne: id },
+      });
+
+      if (existingPhone) {
+        return res.status(400).json({
+          success: false,
+          error: "Phone number already in use by another member",
+        });
+      }
+    }
+
+    // Update fields
+    const allowedUpdates = [
+      "fullName",
+      "email",
+      "phoneNumber",
+      "alternatePhone",
+      "dateOfBirth",
+      "gender",
+      "address",
+      "emergencyContact",
+      "photo",
+      "cprNumber",
+      "joiningDate",
+      "dueDate",
+      "vaccinationStatus",
+      "vaccinationDetails",
+      "medicalConditions",
+      "bloodGroup",
+      "height",
+      "weight",
+      "referredBy",
+      "salesRepresentative",
+      "notes",
+      "tags",
+      "assignedTrainer",
+      "totalPaid",
+      "totalPending",
+      "paymentDate",
+      "photo",
+      "documents",
+    ];
+
+    allowedUpdates.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        member[field] = req.body[field];
+      }
+    });
+
+    await member.save();
+
+    console.log(`✅ Member updated: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Member updated successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error updating member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update member",
+    });
+  }
+};
+
+// ============================================
+// ADD PACKAGE TO MEMBER
+// ============================================
+const addPackageToMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`📦 Adding package to member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    const {
+      packageId,
+      packageName,
+      packageType,
+      startDate,
+      endDate,
+      amount,
+      discount,
+      finalAmount,
+      paymentStatus,
+      paymentMethod,
+      transactionId,
+      packageStatus,
+      isPrimary,
+      autoRenew,
+      notes,
+    } = req.body;
+
+    // Verify package exists
+    const packageExists = await Package.findById(packageId);
+    if (!packageExists) {
+      return res.status(400).json({
+        success: false,
+        error: "Package not found",
+      });
+    }
+
+    // If this is primary, set all others to non-primary
+    if (isPrimary) {
+      member.packages.forEach((pkg) => {
+        pkg.isPrimary = false;
+      });
+    }
+
+    const newPackage = {
+      packageId,
+      packageName: packageName || packageExists.packageName,
+      packageType: packageType || packageExists.packageType,
+      startDate,
+      endDate,
+      amount,
+      discount: discount || 0,
+      finalAmount: finalAmount || amount - (discount || 0),
+      paymentStatus: paymentStatus || "Pending",
+      paymentMethod: paymentMethod || "Cash",
+      transactionId: transactionId || "",
+      packageStatus: packageStatus || "Active",
+      isPrimary: isPrimary || false,
+      autoRenew: autoRenew || false,
+      notes: notes || "",
+    };
+
+    await member.addPackage(newPackage);
+
+    // Add payment if paid
+    if (paymentStatus === "Paid") {
+      await member.addPayment({
+        date: new Date(),
+        amount: finalAmount || amount,
+        paymentMethod: paymentMethod || "Cash",
+        transactionId: transactionId || "",
+        packageName: packageName || packageExists.packageName,
+        status: "Success",
+        notes: notes || "",
+      });
+    }
+
+    console.log(`✅ Package added to member: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Package added successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error adding package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to add package",
+    });
+  }
+};
+
+// ============================================
+// UPDATE PACKAGE STATUS
+// ============================================
+const updatePackageStatus = async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+    const { status } = req.body;
+
+    console.log(
+      `🔄 Updating package status for member ID: ${id}, package ID: ${packageId}`
+    );
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    await member.updatePackageStatus(packageId, status);
+
+    console.log(`✅ Package status updated to: ${status}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Package status updated successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error updating package status:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update package status",
+    });
+  }
+};
+
+// ============================================
+// UPDATE PACKAGE START DATE
+// ============================================
+const updatePackageStartDate = async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+    const { startDate } = req.body;
+
+    console.log(
+      `📅 Updating package start date for member ID: ${id}, package ID: ${packageId}, new date: ${startDate}`
+    );
+
+    if (!startDate) {
+      return res.status(400).json({
+        success: false,
+        error: "Start date is required",
+      });
+    }
+
+    const newStartDate = new Date(startDate);
+    if (isNaN(newStartDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid date format",
+      });
+    }
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    // Find the package
+    const packageIndex = member.packages.findIndex(
+      (pkg) => pkg._id.toString() === packageId
+    );
+
+    if (packageIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: "Package not found",
+      });
+    }
+
+    const oldStartDate = member.packages[packageIndex].startDate;
+
+    // Update start date
+    member.packages[packageIndex].startDate = newStartDate;
+
+    // Recalculate end date based on package duration
+    const pkg = member.packages[packageIndex];
+    const packageDuration = await Package.findById(pkg.packageId);
+
+    if (packageDuration) {
+      const endDate = new Date(newStartDate);
+      switch (packageDuration.duration.unit) {
+        case "Days":
+          endDate.setDate(endDate.getDate() + packageDuration.duration.value);
+          break;
+        case "Weeks":
+          endDate.setDate(
+            endDate.getDate() + packageDuration.duration.value * 7
+          );
+          break;
+        case "Months":
+          endDate.setMonth(endDate.getMonth() + packageDuration.duration.value);
+          break;
+        case "Years":
+          endDate.setFullYear(
+            endDate.getFullYear() + packageDuration.duration.value
+          );
+          break;
+        default:
+          endDate.setMonth(endDate.getMonth() + packageDuration.duration.value);
+      }
+      member.packages[packageIndex].endDate = endDate;
+    }
+
+    // Update payment date if needed
+    member.packages[packageIndex].paymentDate = newStartDate;
+
+    await member.save();
+
+    console.log(
+      `✅ Package start date updated from ${oldStartDate} to ${newStartDate}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Package start date updated successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error updating package start date:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update package start date",
+    });
+  }
+};
+
+// ============================================
+// ADD PAYMENT
+// ============================================
+const addPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`💰 Adding payment for member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    const paymentData = {
+      date: req.body.date || new Date(),
+      amount: req.body.amount,
+      paymentMethod: req.body.paymentMethod,
+      transactionId: req.body.transactionId || "",
+      packageName: req.body.packageName || "",
+      receiptNumber: req.body.receiptNumber || "",
+      status: req.body.status || "Success",
+      notes: req.body.notes || "",
+    };
+
+    await member.addPayment(paymentData);
+
+    // Create payment history record
+    try {
+      const paymentRecord = await PaymentHistory.create({
+        memberId: member._id,
+        memberName: member.fullName,
+        memberEmail: member.email,
+        memberPhone: member.phoneNumber,
+        packageName: paymentData.packageName,
+        transactionType: "Partial Payment",
+        amount: parseFloat(paymentData.amount),
+        discount: 0,
+        finalAmount: parseFloat(paymentData.amount),
+        paymentStatus: paymentData.status === "Success" ? "Paid" : "Pending",
+        paymentMethod: paymentData.paymentMethod,
+        paymentDate: paymentData.date || new Date(),
+        transactionId: paymentData.transactionId,
+        notes: paymentData.notes || "Additional payment",
+        collectedBy: {
+          userId: req.user?.id,
+          userName: req.user?.fullName || req.user?.email,
+          role: req.user?.role,
+        },
+      });
+      console.log(
+        "💾 Payment history record created:",
+        paymentRecord.receiptNumber
+      );
+    } catch (paymentError) {
+      console.error(
+        "⚠️ Failed to create payment history record:",
+        paymentError
+      );
+    }
+
+    console.log(`✅ Payment added: ₹${paymentData.amount}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment added successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error adding payment:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to add payment",
+    });
+  }
+};
+
+// ============================================
+// RECORD ATTENDANCE
+// ============================================
+const recordAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { checkIn, checkOut } = req.body;
+
+    console.log(`📅 Recording attendance for member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    await member.recordAttendance(checkIn, checkOut);
+
+    console.log(`✅ Attendance recorded for: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance recorded successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error recording attendance:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to record attendance",
+    });
+  }
+};
+
+// ============================================
+// DELETE MEMBER (SOFT DELETE)
+// ============================================
+const deleteMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🗑️ Soft deleting member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    member.isDeleted = true;
+    member.deletedAt = new Date();
+    member.memberStatus = "Inactive";
+    await member.save();
+
+    console.log(`✅ Member soft deleted: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Member deleted successfully",
+    });
+  } catch (error) {
+    console.error("❌ Error deleting member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to delete member",
+    });
+  }
+};
+
+// ============================================
+// RESTORE MEMBER
+// ============================================
+const restoreMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`♻️ Restoring member ID: ${id}`);
+
+    const member = await Member.findOne({ _id: id, isDeleted: true });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Deleted member not found",
+      });
+    }
+
+    member.isDeleted = false;
+    member.deletedAt = null;
+    member.memberStatus = "Active";
+    await member.save();
+
+    console.log(`✅ Member restored: ${member.fullName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Member restored successfully",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error restoring member:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to restore member",
+    });
+  }
+};
+
+// ============================================
+// BULK DELETE MEMBERS
+// ============================================
+const bulkDeleteMembers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    console.log(`🗑️ Bulk deleting members:`, ids);
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide an array of member IDs",
+      });
+    }
+
+    const result = await Member.updateMany(
+      { _id: { $in: ids }, isDeleted: false },
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+        memberStatus: "Inactive",
+      }
+    );
+
+    console.log(`✅ Soft deleted ${result.modifiedCount} members`);
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.modifiedCount} members deleted successfully`,
+      deletedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("❌ Error bulk deleting members:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to delete members",
+    });
+  }
+};
+
+// ============================================
+// GET ACTIVE MEMBERS
+// ============================================
+const getActiveMembers = async (req, res) => {
+  try {
+    console.log("✅ Fetching active members...");
+
+    const members = await Member.getActiveMembers()
+      .populate("assignedTrainer", "name")
+      .select("-paymentHistory -attendanceHistory")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: members.length,
+      members,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching active members:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch active members",
+    });
+  }
+};
+
+// ============================================
+// GET EXPIRING MEMBERSHIPS
+// ============================================
+const getExpiringMemberships = async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 7;
+    console.log(`⏰ Fetching memberships expiring in ${days} days...`);
+
+    const members = await Member.getExpiringMemberships(days)
+      .select("fullName email phoneNumber registrationNumber currentPackage")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: members.length,
+      days,
+      members,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching expiring memberships:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch expiring memberships",
+    });
+  }
+};
+
+// ============================================
+// GET MEMBER STATISTICS
+// ============================================
+const getMemberStatistics = async (req, res) => {
+  try {
+    console.log("📊 Fetching member statistics...");
+
+    const totalMembers = await Member.countDocuments({ isDeleted: false });
+
+    const vaccinationStats = await Member.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $group: {
+          _id: "$vaccinationStatus",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const genderStats = await Member.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $group: {
+          _id: "$gender",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const recentJoinings = await Member.find({ isDeleted: false })
+      .sort({ joiningDate: -1 })
+      .limit(10)
+      .select("fullName email registrationNumber joiningDate")
+      .lean();
+
+    const statistics = {
+      totalMembers,
+      vaccinationStats,
+      genderStats,
+      recentJoinings,
+    };
+
+    console.log("✅ Statistics calculated");
+
+    return res.status(200).json({
+      success: true,
+      statistics,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching statistics:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch statistics",
+    });
+  }
+};
+
+// ============================================
+// GET DASHBOARD STATISTICS
+// ============================================
+const getDashboardStatistics = async (req, res) => {
+  try {
+    console.log("📊 Fetching dashboard statistics...");
+
+    // Get total members count
+    const totalMembers = await Member.countDocuments({ isDeleted: false });
+
+    // Get payment statistics
+    const paymentStats = await Member.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $group: {
+          _id: null,
+          totalPaid: { $sum: "$totalPaid" },
+          totalPending: { $sum: "$totalPending" },
+        },
+      },
+    ]);
+
+    const totalPaid = paymentStats.length > 0 ? paymentStats[0].totalPaid : 0;
+    const totalPending =
+      paymentStats.length > 0 ? paymentStats[0].totalPending : 0;
+
+    console.log("✅ Dashboard statistics calculated:", {
+      totalMembers,
+      totalPaid,
+      totalPending,
+    });
+
+    return res.status(200).json({
+      success: true,
+      statistics: {
+        totalMembers,
+        totalPaid,
+        totalPending,
+        totalRevenue: totalPaid + totalPending,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error fetching dashboard statistics:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch dashboard statistics",
+    });
+  }
+};
+
+// ============================================
+// UPDATE MEMBER PAYMENT
+// ============================================
+const updateMemberPayment = async (req, res) => {
+  try {
+    console.log("💳 Updating member payment...");
+    const { id } = req.params;
+    const { amountPaid, paymentStatus, totalPaid, totalPending } = req.body;
+
+    // Find member
+    const member = await Member.findById(id);
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    // Update payment details
+    member.totalPaid = totalPaid;
+    member.totalPending = totalPending;
+    member.paymentDate = new Date();
+
+    // Update primary package payment status if exists
+    if (member.packages && member.packages.length > 0) {
+      const primaryPackage = member.packages.find((pkg) => pkg.isPrimary);
+      if (primaryPackage) {
+        primaryPackage.paymentStatus = paymentStatus;
+      }
+    }
+
+    // Add to payment history if amount was paid
+    if (amountPaid > 0) {
+      member.paymentHistory.push({
+        date: new Date(),
+        amount: amountPaid,
+        paymentMethod: "Cash",
+        packageName: member.currentPackage?.packageName || "General Payment",
+        transactionId: "",
+        status: "Success",
+        notes: `Payment update - Status: ${paymentStatus}`,
+      });
+      member.markModified("paymentHistory");
+    }
+
+    await member.save();
+
+    // Send payment receipt email
+    if (member.email) {
+      const isFullyPaid = totalPending === 0;
+      await sendPaymentReceiptEmail(member.email, {
+        fullName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        amountPaid: amountPaid,
+        totalPaid: totalPaid,
+        totalPending: totalPending,
+        paymentStatus: paymentStatus,
+        paymentDate: new Date().toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        packageName: member.currentPackage?.packageName || "N/A",
+        isFullyPaid: isFullyPaid,
+      });
+      console.log("📧 Payment receipt email sent to:", member.email);
+    }
+
+    console.log(
+      `✅ Payment updated for member: ${member.fullName} (${member.registrationNumber})`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment updated successfully and email sent",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error updating member payment:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update member payment",
+    });
+  }
+};
+
+// ============================================
+// RENEW PACKAGE
+// ============================================
+const renewPackage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { packageId, renewData } = req.body;
+
+    console.log(`🔄 Renewing package for member ID: ${id}`);
+
+    // Validation
+    if (!packageId || !renewData) {
+      return res.status(400).json({
+        success: false,
+        error: "Package ID and renew data are required",
+      });
+    }
+
+    const {
+      startDate,
+      endDate,
+      amount,
+      discount,
+      totalPaid,
+      totalPending,
+      paymentDate,
+      paymentStatus,
+      paymentMethod,
+      transactionId,
+    } = renewData;
+
+    if (!startDate || !endDate || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: "Start date, end date, and amount are required",
+      });
+    }
+
+    // Find member
+    const member = await Member.findOne({ _id: id, isDeleted: false })
+      .populate("packages.packageId", "packageName packageType freezable")
+      .populate("assignedTrainer", "name email");
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    // Find the package to renew
+    const packageToRenew = member.packages.find(
+      (pkg) => pkg._id.toString() === packageId
+    );
+
+    if (!packageToRenew) {
+      return res.status(404).json({
+        success: false,
+        error: "Package not found in member's packages",
+      });
+    }
+
+    // Check if package is still active
+    if (packageToRenew.packageStatus === "Active") {
+      return res.status(400).json({
+        success: false,
+        error: "Cannot renew an active package. Wait until it expires.",
+      });
+    }
+
+    // Calculate final amount
+    const finalAmount = parseFloat(amount) - parseFloat(discount || 0);
+    const paid = parseFloat(totalPaid || 0);
+    const pending = Math.max(0, finalAmount - paid);
+
+    // Update the package with renewal details
+    packageToRenew.startDate = startDate;
+    packageToRenew.endDate = endDate;
+    packageToRenew.amount = amount;
+    packageToRenew.discount = discount || 0;
+    packageToRenew.finalAmount = finalAmount;
+    packageToRenew.totalPaid = paid;
+    packageToRenew.totalPending = pending;
+    packageToRenew.paymentDate = paymentDate || new Date();
+    packageToRenew.paymentStatus = paymentStatus || "Pending";
+    packageToRenew.paymentMethod = paymentMethod || "Cash";
+    packageToRenew.transactionId = transactionId || "";
+    packageToRenew.packageStatus = "Active"; // Set as active after renewal
+    packageToRenew.renewalDate = new Date(); // Track renewal date
+
+    // Update member's total paid and pending
+    member.totalPaid = (member.totalPaid || 0) + paid;
+    member.totalPending = member.packages.reduce(
+      (sum, pkg) => sum + (pkg.totalPending || 0),
+      0
+    );
+
+    // Add to payment history if payment was made
+    if (paid > 0) {
+      member.paymentHistory.push({
+        date: paymentDate || new Date(),
+        amount: paid,
+        paymentMethod: paymentMethod || "Cash",
+        transactionId: transactionId || "",
+        packageName: packageToRenew.packageName,
+        status: "Success",
+        notes: `Package renewal payment`,
+      });
+      member.markModified("paymentHistory");
+
+      // Create payment history record
+      try {
+        const paymentRecord = await PaymentHistory.create({
+          memberId: member._id,
+          memberName: member.fullName,
+          memberEmail: member.email,
+          memberPhone: member.phoneNumber,
+          packageId: packageToRenew.packageId?._id || packageToRenew.packageId,
+          packageName: packageToRenew.packageName,
+          packageType: packageToRenew.packageType,
+          transactionType: "Renewal",
+          amount: parseFloat(amount),
+          discount: parseFloat(discount || 0),
+          finalAmount: finalAmount,
+          paymentStatus: paymentStatus || "Pending",
+          paymentMethod: paymentMethod || "Cash",
+          paymentDate: paymentDate || new Date(),
+          transactionId: transactionId || "",
+          membershipStartDate: startDate,
+          membershipEndDate: endDate,
+          notes: "Package renewal payment",
+          collectedBy: {
+            userId: req.user?.id,
+            userName: req.user?.fullName || req.user?.email,
+            role: req.user?.role,
+          },
+        });
+        console.log(
+          "💾 Renewal payment history record created:",
+          paymentRecord.receiptNumber
+        );
+      } catch (paymentError) {
+        console.error(
+          "⚠️ Failed to create payment history record:",
+          paymentError
+        );
+      }
+    }
+
+    await member.save();
+
+    // Send renewal email with invoice (existing payment receipt)
+    if (member.email) {
+      const isFullyPaid = pending === 0;
+
+      // Send payment receipt email
+      await sendPaymentReceiptEmail(member.email, {
+        fullName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        amountPaid: paid,
+        totalPaid: member.totalPaid,
+        totalPending: member.totalPending,
+        paymentStatus: paymentStatus,
+        paymentDate: new Date(paymentDate).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        packageName: packageToRenew.packageName,
+        isFullyPaid: isFullyPaid,
+      });
+      console.log("📧 Payment receipt email sent to:", member.email);
+
+      // Send renewal notification email
+      await sendPackageRenewalEmail(member.email, {
+        memberName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        packageName: packageToRenew.packageName,
+        startDate: startDate,
+        endDate: endDate,
+        amount: amount,
+        amountPaid: paid,
+        paymentStatus: paymentStatus,
+        paymentDate: paymentDate || new Date(),
+      });
+      console.log("📧 Renewal notification email sent to:", member.email);
+    }
+
+    console.log(
+      `✅ Package renewed successfully for member: ${member.fullName}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Package renewed successfully and emails sent",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error renewing package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to renew package",
+    });
+  }
+};
+
+// ============================================
+// EXPIRE PACKAGE (FOR TESTING)
+// ============================================
+const expirePackage = async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+
+    console.log(
+      `⏰ Expiring package for member ID: ${id}, Package ID: ${packageId}`
+    );
+
+    const member = await Member.findOne({ _id: id, isDeleted: false });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    const packageToExpire = member.packages.find(
+      (pkg) => pkg._id.toString() === packageId
+    );
+
+    if (!packageToExpire) {
+      return res.status(404).json({
+        success: false,
+        error: "Package not found",
+      });
+    }
+
+    // Set package status to Expired
+    packageToExpire.packageStatus = "Expired";
+
+    await member.save();
+
+    console.log(`✅ Package expired successfully for testing`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Package marked as expired",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error expiring package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to expire package",
+    });
+  }
+};
+
+// ============================================
+// FREEZE PACKAGE
+// ============================================
+const freezePackage = async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+    const { freezeDays } = req.body;
+
+    console.log(
+      `❄️ Freezing package for member ID: ${id}, Package ID: ${packageId}, Days: ${freezeDays}`
+    );
+
+    // Validation
+    if (!freezeDays || freezeDays <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Freeze days must be a positive number",
+      });
+    }
+
+    const member = await Member.findOne({ _id: id, isDeleted: false }).populate(
+      "packages.packageId"
+    );
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    const packageToFreeze = member.packages.find(
+      (pkg) => pkg._id.toString() === packageId
+    );
+
+    if (!packageToFreeze) {
+      return res.status(404).json({
+        success: false,
+        error: "Package not found",
+      });
+    }
+
+    // Check if package is freezable
+    if (!packageToFreeze.packageId?.freezable) {
+      return res.status(400).json({
+        success: false,
+        error: "This package cannot be frozen",
+      });
+    }
+
+    // Extend the end date by freeze days
+    const currentEndDate = new Date(packageToFreeze.endDate);
+    currentEndDate.setDate(currentEndDate.getDate() + parseInt(freezeDays));
+    packageToFreeze.endDate = currentEndDate;
+
+    // Update current package end date if this is the primary package
+    if (packageToFreeze.isPrimary && member.currentPackage) {
+      member.currentPackage.endDate = currentEndDate;
+    }
+
+    await member.save();
+
+    // Send freeze notification email
+    if (member.email) {
+      await sendPackageFreezeEmail(member.email, {
+        memberName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        packageName: packageToFreeze.packageName,
+        freezeDays: freezeDays,
+        newEndDate: currentEndDate,
+      });
+      console.log("📧 Freeze notification email sent to:", member.email);
+    }
+
+    console.log(
+      `✅ Package frozen successfully. New end date: ${currentEndDate.toISOString()}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Package frozen for ${freezeDays} days. End date extended and email sent.`,
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error freezing package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to freeze package",
+    });
+  }
+};
+
+// ============================================
+// EXTEND PACKAGE
+// ============================================
+const extendPackage = async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+    const { extensionDays, addExtraAmount, extraAmount, amountPaid } = req.body;
+
+    console.log("📦 Extending package:", {
+      memberId: id,
+      packageId,
+      extensionDays,
+      addExtraAmount,
+      extraAmount,
+      amountPaid,
+    });
+
+    // Validate required fields
+    if (!extensionDays || extensionDays <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Extension days must be greater than 0",
+      });
+    }
+
+    // If adding extra amount, validate payment fields
+    if (addExtraAmount) {
+      if (!extraAmount || extraAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Extra amount must be greater than 0",
+        });
+      }
+      if (amountPaid === undefined || amountPaid < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Amount paid cannot be negative",
+        });
+      }
+    }
+
+    const member = await Member.findById(id);
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
+
+    // Find the package to extend
+    const packageToExtend = member.packages.id(packageId);
+    if (!packageToExtend) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    // Check if package is already deleted or expired
+    if (packageToExtend.status === "deleted") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot extend a deleted package",
+      });
+    }
+
+    // Extend the end date
+    const currentEndDate = new Date(packageToExtend.endDate);
+    currentEndDate.setDate(currentEndDate.getDate() + parseInt(extensionDays));
+    packageToExtend.endDate = currentEndDate;
+
+    // Mark endDate as modified
+    const packageIndex = member.packages.indexOf(packageToExtend);
+    member.markModified(`packages.${packageIndex}.endDate`);
+
+    console.log(`✅ Extended end date to: ${currentEndDate.toISOString()}`);
+
+    // Handle extra amount if requested
+    if (addExtraAmount) {
+      const parsedExtraAmount = parseFloat(extraAmount);
+      const parsedAmountPaid = parseFloat(amountPaid);
+
+      // Add extra amount to final amount
+      packageToExtend.finalAmount =
+        (packageToExtend.finalAmount || 0) + parsedExtraAmount;
+
+      // Update totalPaid
+      packageToExtend.totalPaid =
+        (packageToExtend.totalPaid || 0) + parsedAmountPaid;
+
+      // Recalculate totalPending (this is the due amount)
+      packageToExtend.totalPending =
+        packageToExtend.finalAmount - packageToExtend.totalPaid;
+
+      // Update paymentDate if payment was made
+      if (parsedAmountPaid > 0) {
+        packageToExtend.paymentDate = new Date();
+
+        // Add to payment history
+        member.paymentHistory.push({
+          date: new Date(),
+          amount: parsedAmountPaid,
+          paymentMethod: packageToExtend.paymentMethod || "Cash",
+          packageName: packageToExtend.packageName,
+          transactionId: "",
+          status: "Success",
+          notes: `Extension payment - ${extensionDays} days extension`,
+        });
+      }
+
+      // Mark the nested package fields as modified to ensure they persist
+      member.markModified(`packages.${packageIndex}.finalAmount`);
+      member.markModified(`packages.${packageIndex}.totalPaid`);
+      member.markModified(`packages.${packageIndex}.totalPending`);
+      member.markModified(`packages.${packageIndex}.paymentDate`);
+      member.markModified("paymentHistory");
+
+      console.log("💰 Updated package amounts:", {
+        finalAmount: packageToExtend.finalAmount,
+        totalPaid: packageToExtend.totalPaid,
+        totalPending: packageToExtend.totalPending,
+        dueAmount: packageToExtend.totalPending,
+      });
+    }
+
+    // Update member-level totals
+    member.totalPaid = member.packages
+      .filter((pkg) => pkg.status !== "deleted")
+      .reduce((sum, pkg) => sum + (pkg.totalPaid || 0), 0);
+
+    member.totalPending = member.packages
+      .filter((pkg) => pkg.status !== "deleted")
+      .reduce((sum, pkg) => sum + (pkg.totalPending || 0), 0);
+
+    console.log("👤 Updated member totals:", {
+      totalPaid: member.totalPaid,
+      totalPending: member.totalPending,
+    });
+
+    // Update currentPackage.endDate if this is the primary package
+    if (packageToExtend.isPrimary) {
+      member.currentPackage.endDate = currentEndDate;
+      console.log("✅ Updated currentPackage end date");
+    }
+
+    // Mark modified for nested objects
+    member.markModified("packages");
+    member.markModified("totalPaid");
+    member.markModified("totalPending");
+    member.markModified("currentPackage.endDate");
+
+    await member.save();
+
+    // Send extension notification email
+    if (member.email) {
+      await sendPackageExtensionEmail(member.email, {
+        memberName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        packageName: packageToExtend.packageName,
+        extensionDays: extensionDays,
+        newEndDate: currentEndDate,
+        extraAmount: addExtraAmount ? extraAmount : null,
+        amountPaid: addExtraAmount ? amountPaid : null,
+      });
+      console.log("📧 Extension notification email sent to:", member.email);
+    }
+
+    console.log("✅ Package extended successfully");
+
+    return res.status(200).json({
+      success: true,
+      message: `Package extended by ${extensionDays} days successfully and email sent`,
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error extending package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to extend package",
+    });
+  }
+};
+
+// ============================================
+// UPGRADE PACKAGE
+// ============================================
+const upgradePackage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      packageId,
+      startDate,
+      endDate,
+      amount,
+      discount,
+      totalPaid,
+      totalPending,
+      paymentDate,
+      paymentStatus,
+      paymentMethod,
+      transactionId,
+      oldPackageId,
+      oldPackageAction,
+    } = req.body;
+
+    console.log(`🔄 Adding upgrade package for member ID: ${id}`);
+
+    // Validation
+    if (!packageId || !startDate || !endDate || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: "Package ID, start date, end date, and amount are required",
+      });
+    }
+
+    // Find member
+    const member = await Member.findOne({ _id: id, isDeleted: false })
+      .populate("packages.packageId", "packageName packageType freezable")
+      .populate("assignedTrainer", "name email");
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: "Member not found",
+      });
+    }
+
+    // Handle optional old package removal
+    let removedPackagePaid = 0;
+    let removedPackagePending = 0;
+
+    if (oldPackageId && oldPackageAction) {
+      const oldPackageIndex = member.packages.findIndex(
+        (pkg) => pkg._id.toString() === oldPackageId
+      );
+
+      if (oldPackageIndex !== -1) {
+        const oldPackage = member.packages[oldPackageIndex];
+
+        if (oldPackageAction === "expire") {
+          // Set old package as expired
+          member.packages[oldPackageIndex].packageStatus = "Expired";
+          console.log(`📦 Old package marked as expired`);
+        } else if (oldPackageAction === "delete") {
+          // Store the amounts before removing
+          removedPackagePaid = parseFloat(oldPackage.totalPaid) || 0;
+          removedPackagePending = parseFloat(oldPackage.totalPending) || 0;
+
+          // Remove old package
+          member.packages.splice(oldPackageIndex, 1);
+          console.log(
+            `🗑️ Old package deleted - Paid: ${removedPackagePaid}, Pending: ${removedPackagePending}`
+          );
+        }
+      }
+    }
+
+    // Find the package details
+    const Package = require("../../models/admin/Packages");
+    const packageDetails = await Package.findById(packageId);
+
+    if (!packageDetails) {
+      return res.status(404).json({
+        success: false,
+        error: "Package not found",
+      });
+    }
+
+    // Calculate final amount for new package
+    const finalAmount = parseFloat(amount) - parseFloat(discount || 0);
+    const paid = parseFloat(totalPaid || 0);
+    const pending = Math.max(0, finalAmount - paid);
+
+    // Add new package
+    const newPackage = {
+      packageId: packageId,
+      packageName: packageDetails.packageName,
+      packageType: packageDetails.packageType,
+      startDate: startDate,
+      endDate: endDate,
+      amount: amount,
+      discount: discount || 0,
+      finalAmount: finalAmount,
+      totalPaid: paid,
+      totalPending: pending,
+      paymentDate: paymentDate || new Date(),
+      paymentStatus: paymentStatus || "Pending",
+      paymentMethod: paymentMethod || "Cash",
+      transactionId: transactionId || "",
+      packageStatus: "Active",
+      isPrimary: member.packages.length === 0, // Set as primary if it's the only package
+      addedDate: new Date(),
+    };
+
+    member.packages.push(newPackage);
+
+    // Update member's total paid and pending
+    const previousTotalPaid = member.totalPaid || 0;
+    const previousTotalPending = member.totalPending || 0;
+
+    // If old package was deleted, subtract its paid amount and add new paid amount
+    // If old package was expired or no action, just add new paid amount
+    member.totalPaid = previousTotalPaid - removedPackagePaid + paid;
+
+    // Recalculate totalPending from all packages (including the new one)
+    const calculatedPending = member.packages.reduce((sum, pkg) => {
+      const pkgPending = parseFloat(pkg.totalPending) || 0;
+      console.log(`  📦 ${pkg.packageName}: pending = ₹${pkgPending}`);
+      return sum + pkgPending;
+    }, 0);
+
+    member.totalPending = calculatedPending;
+
+    // Mark fields as modified to ensure they're saved
+    member.markModified("totalPaid");
+    member.markModified("totalPending");
+    member.markModified("packages");
+
+    console.log(
+      `💰 Updated member totals - Previous: (Paid: ${previousTotalPaid}, Pending: ${previousTotalPending}) → New: (Paid: ${member.totalPaid}, Pending: ${member.totalPending})`
+    );
+
+    // Update current package if this is primary
+    if (newPackage.isPrimary) {
+      member.currentPackage = {
+        packageId: packageId,
+        packageName: packageDetails.packageName,
+        startDate: startDate,
+        endDate: endDate,
+      };
+    }
+
+    // Add payment if paid
+    if (paymentStatus === "Paid") {
+      await member.addPayment({
+        date: paymentDate || new Date(),
+        amount: paid,
+        paymentMethod: paymentMethod || "Cash",
+        transactionId: transactionId || "",
+        packageName: packageDetails.packageName,
+        status: "Success",
+        notes: "Package upgrade payment",
+      });
+
+      // Create payment history record
+      try {
+        const paymentRecord = await PaymentHistory.create({
+          memberId: member._id,
+          memberName: member.fullName,
+          memberEmail: member.email,
+          memberPhone: member.phoneNumber,
+          packageId: packageId,
+          packageName: packageDetails.packageName,
+          packageType: packageDetails.packageType,
+          transactionType: "Upgrade",
+          amount: parseFloat(amount),
+          discount: parseFloat(discount || 0),
+          finalAmount: finalAmount,
+          paymentStatus: "Paid",
+          paymentMethod: paymentMethod || "Cash",
+          paymentDate: paymentDate || new Date(),
+          transactionId: transactionId || "",
+          membershipStartDate: startDate,
+          membershipEndDate: endDate,
+          notes: "Package upgrade payment",
+          collectedBy: {
+            userId: req.user?.id,
+            userName: req.user?.fullName || req.user?.email,
+            role: req.user?.role,
+          },
+        });
+        console.log(
+          "💾 Upgrade payment history record created:",
+          paymentRecord.receiptNumber
+        );
+      } catch (paymentError) {
+        console.error(
+          "⚠️ Failed to create payment history record:",
+          paymentError
+        );
+      }
+    }
+
+    await member.save();
+
+    // Send upgrade email with invoice
+    if (member.email) {
+      const isFullyPaid = pending === 0;
+      await sendPaymentReceiptEmail(member.email, {
+        fullName: member.fullName,
+        registrationNumber: member.registrationNumber,
+        amountPaid: paid,
+        totalPaid: member.totalPaid,
+        totalPending: member.totalPending,
+        paymentStatus: paymentStatus,
+        paymentDate: new Date(paymentDate).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        packageName: packageDetails.packageName,
+        isFullyPaid: isFullyPaid,
+      });
+      console.log("📧 Upgrade email with invoice sent to:", member.email);
+    }
+
+    console.log(
+      `✅ Package upgraded successfully for member: ${member.fullName}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Package upgraded successfully and email sent",
+      member,
+    });
+  } catch (error) {
+    console.error("❌ Error upgrading package:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to upgrade package",
+    });
+  }
+};
+
+// ============================================
+// SEND PACKAGE EXPIRY REMINDERS (For cron job)
+// ============================================
+const sendPackageExpiryReminders = async () => {
+  try {
+    console.log("📧 Checking for package expiry reminders to send...");
+    console.log("🕐 Current time:", new Date().toLocaleString());
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    // Calculate target dates for 1, 3, and 7 days from now
+    const oneDayLater = new Date(now);
+    oneDayLater.setDate(oneDayLater.getDate() + 1);
+    oneDayLater.setHours(23, 59, 59, 999);
+
+    const threeDaysLater = new Date(now);
+    threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+    threeDaysLater.setHours(23, 59, 59, 999);
+
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+    sevenDaysLater.setHours(23, 59, 59, 999);
+
+    console.log(`📅 Checking packages expiring on:`);
+    console.log(`  - 1 day: ${oneDayLater.toDateString()}`);
+    console.log(`  - 3 days: ${threeDaysLater.toDateString()}`);
+    console.log(`  - 7 days: ${sevenDaysLater.toDateString()}`);
+
+    // Find members with active packages expiring in 1, 3, or 7 days
+    const members = await Member.find({
+      isDeleted: { $ne: true },
+      "packages.packageStatus": "Active",
+      "packages.endDate": {
+        $in: [oneDayLater, threeDaysLater, sevenDaysLater],
+      },
+    }).select("fullName email phoneNumber packages");
+
+    console.log(`👥 Found ${members.length} members to check`);
+
+    const smsEnabled = process.env.ENABLE_SMS_NOTIFICATIONS === "true";
+    console.log(`📱 SMS notifications: ${smsEnabled ? "ENABLED" : "DISABLED"}`);
+
+    let emailSentCount = 0;
+    let emailSkippedCount = 0;
+    let smsSentCount = 0;
+    let smsSkippedCount = 0;
+
+    for (const member of members) {
+      // Check each package of the member
+      for (const pkg of member.packages) {
+        if (pkg.packageStatus !== "Active") continue;
+
+        const packageEndDate = new Date(pkg.endDate);
+        packageEndDate.setHours(0, 0, 0, 0);
+
+        // Calculate days left
+        const timeDiff = packageEndDate - now;
+        const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+        // Only send reminder if expiring in exactly 1, 3, or 7 days
+        if (![1, 3, 7].includes(daysLeft)) continue;
+
+        console.log(
+          `📦 ${member.fullName} - Package \"${pkg.packageName}\" expires in ${daysLeft} days`
+        );
+
+        // Send Email
+        if (member.email) {
+          try {
+            await sendPackageExpiryEmail(member.email, {
+              memberName: member.fullName,
+              packageName: pkg.packageName,
+              endDate: pkg.endDate,
+              daysLeft: daysLeft,
+            });
+            emailSentCount++;
+            console.log(`  ✅ Email sent to ${member.email}`);
+          } catch (emailError) {
+            console.error(
+              `  ❌ Failed to send email to ${member.email}:`,
+              emailError.message
+            );
+            emailSkippedCount++;
+          }
+        } else {
+          console.log(`  ⚠️ No email for ${member.fullName}`);
+        }
+
+        // Send SMS if enabled and phone number exists
+        if (smsEnabled && member.phoneNumber) {
+          const smsResult = await sendPackageExpirySMS(
+            member.phoneNumber,
+            member.fullName,
+            pkg.packageName,
+            pkg.endDate,
+            daysLeft
+          );
+
+          if (smsResult.success) {
+            smsSentCount++;
+            console.log(`  ✅ SMS sent to ${member.phoneNumber}`);
+          } else {
+            smsSkippedCount++;
+            console.error(
+              `  ❌ Failed to send SMS to ${member.phoneNumber}: ${smsResult.error}`
+            );
+          }
+        } else if (smsEnabled && !member.phoneNumber) {
+          console.log(`  ⚠️ No phone number for ${member.fullName}`);
+        }
+      }
+    }
+
+    console.log(
+      `✅ Package expiry reminders sent:\n` +
+        `   📧 Email: ${emailSentCount} sent, ${emailSkippedCount} failed\n` +
+        `   📱 SMS: ${smsSentCount} sent, ${smsSkippedCount} failed`
+    );
+
+    return {
+      email: { sent: emailSentCount, skipped: emailSkippedCount },
+      sms: { sent: smsSentCount, skipped: smsSkippedCount },
+    };
+  } catch (error) {
+    console.error("❌ Error sending package expiry reminders:", error);
+    throw error;
+  }
+};
+
+// ============================================
+// MANUAL TRIGGER FOR PACKAGE REMINDERS (Testing)
+// ============================================
+const triggerPackageRemindersManually = async (req, res) => {
+  try {
+    console.log("🔧 Manual trigger: Sending package expiry reminders NOW...");
+
+    const result = await sendPackageExpiryReminders();
+
+    return res.status(200).json({
+      success: true,
+      message: `Package expiry reminders sent successfully`,
+      email: result.email,
+      sms: result.sms,
+    });
+  } catch (error) {
+    console.error("❌ Error in manual trigger:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to send package expiry reminders",
+    });
+  }
+};
+
+// ============================================
+// EXPORTS
+// ============================================
+module.exports = {
+  createMember,
+  getAllMembers,
+  getMemberById,
+  getMemberByRegistrationNumber,
+  updateMember,
+  addPackageToMember,
+  updatePackageStatus,
+  updatePackageStartDate,
+  addPayment,
+  recordAttendance,
+  deleteMember,
+  restoreMember,
+  bulkDeleteMembers,
+  getActiveMembers,
+  getExpiringMemberships,
+  getMemberStatistics,
+  getDashboardStatistics,
+  updateMemberPayment,
+  renewPackage,
+  expirePackage,
+  freezePackage,
+  extendPackage,
+  upgradePackage,
+  sendPackageExpiryReminders,
+  triggerPackageRemindersManually,
+};
