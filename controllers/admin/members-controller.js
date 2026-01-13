@@ -506,6 +506,7 @@ const updateMember = async (req, res) => {
 
     // Update fields
     const allowedUpdates = [
+      "registrationNumber",
       "fullName",
       "email",
       "phoneNumber",
@@ -529,6 +530,7 @@ const updateMember = async (req, res) => {
       "notes",
       "tags",
       "assignedTrainer",
+      "packages",
       "totalPaid",
       "totalPending",
       "paymentDate",
