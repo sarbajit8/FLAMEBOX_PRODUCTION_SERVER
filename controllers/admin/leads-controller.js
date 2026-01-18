@@ -7,13 +7,13 @@ const Lead = require("../../models/admin/Leads");
 // ============================================
 const createLead = async (req, res) => {
   try {
-    console.log('🔍 Creating lead with data:', req.body);
-    
+    console.log("🔍 Creating lead with data:", req.body);
+
     const leadData = req.body;
 
     // Validate required fields
     if (!leadData.fullName || !leadData.email || !leadData.phoneNumber) {
-      console.log('❌ Validation failed: Missing required fields');
+      console.log("❌ Validation failed: Missing required fields");
       return res.status(400).json({
         success: false,
         message: "Full name, email, and phone number are required",
@@ -22,15 +22,12 @@ const createLead = async (req, res) => {
 
     // Check if lead with same email or phone already exists
     const existingLead = await Lead.findOne({
-      $or: [
-        { email: leadData.email },
-        { phoneNumber: leadData.phoneNumber }
-      ],
-      isDeleted: false
+      $or: [{ email: leadData.email }, { phoneNumber: leadData.phoneNumber }],
+      isDeleted: false,
     });
 
     if (existingLead) {
-      console.log('❌ Lead already exists:', existingLead.email);
+      console.log("❌ Lead already exists:", existingLead.email);
       return res.status(400).json({
         success: false,
         message: "Lead with this email or phone number already exists",
@@ -41,12 +38,12 @@ const createLead = async (req, res) => {
     const { addedDate, ...cleanLeadData } = leadData;
 
     // Create new lead - let the default Date.now handle the date
-    console.log('✅ Creating new lead...');
+    console.log("✅ Creating new lead...");
     const newLead = new Lead(cleanLeadData);
     await newLead.save();
 
-    console.log('✅ Lead created successfully:', newLead._id);
-    
+    console.log("✅ Lead created successfully:", newLead._id);
+
     res.status(201).json({
       success: true,
       message: "Lead created successfully",
@@ -57,10 +54,10 @@ const createLead = async (req, res) => {
     console.error("❌ Error name:", error.name);
     console.error("❌ Error message:", error.message);
     console.error("❌ Error stack:", error.stack);
-    
+
     // Handle validation errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
       return res.status(400).json({
         success: false,
         message: "Validation failed",
@@ -80,7 +77,7 @@ const createLead = async (req, res) => {
     }
 
     // Handle cast errors (invalid ObjectId, Date, etc.)
-    if (error.name === 'CastError') {
+    if (error.name === "CastError") {
       return res.status(400).json({
         success: false,
         message: `Invalid ${error.path}: ${error.value}`,
@@ -116,6 +113,14 @@ const getAllLeads = async (req, res) => {
       sortBy = "addedDate",
       sortOrder = "desc",
     } = req.query;
+
+    console.log("🔍 getAllLeads called with:", {
+      startDate,
+      endDate,
+      search,
+      status,
+      source,
+    });
 
     // Build query
     const query = { isDeleted: false };
@@ -156,11 +161,31 @@ const getAllLeads = async (req, res) => {
 
     // Filter by date range
     if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0); // Start of day
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999); // End of day
+
       query.addedDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
+        $gte: start,
+        $lte: end,
       };
+      console.log(
+        `📅 Date filter applied: ${start.toISOString()} to ${end.toISOString()}`,
+      );
+    } else if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      query.addedDate = { $gte: start };
+      console.log(`📅 Start date filter applied: ${start.toISOString()}`);
+    } else if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.addedDate = { $lte: end };
+      console.log(`📅 End date filter applied: ${end.toISOString()}`);
     }
+
+    console.log("📋 Query object:", JSON.stringify(query, null, 2));
 
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -177,6 +202,8 @@ const getAllLeads = async (req, res) => {
 
     const totalLeads = await Lead.countDocuments(query);
     const totalPages = Math.ceil(totalLeads / parseInt(limit));
+
+    console.log(`✅ Query executed: Found ${totalLeads} leads`);
 
     res.status(200).json({
       success: true,
@@ -208,7 +235,10 @@ const getLeadById = async (req, res) => {
 
     const lead = await Lead.findById(id)
       .populate("assignedTo", "fullName email phoneNumber")
-      .populate("convertedToMemberId", "fullName registrationNumber email phoneNumber")
+      .populate(
+        "convertedToMemberId",
+        "fullName registrationNumber email phoneNumber",
+      )
       .populate("followUps.followedUpBy", "fullName");
 
     if (!lead || lead.isDeleted) {
@@ -254,10 +284,10 @@ const updateLead = async (req, res) => {
       const existingLead = await Lead.findOne({
         $or: [
           { email: updateData.email },
-          { phoneNumber: updateData.phoneNumber }
+          { phoneNumber: updateData.phoneNumber },
         ],
         _id: { $ne: id },
-        isDeleted: false
+        isDeleted: false,
       });
 
       if (existingLead) {
@@ -272,7 +302,7 @@ const updateLead = async (req, res) => {
     const updatedLead = await Lead.findByIdAndUpdate(
       id,
       { ...updateData, lastUpdatedDate: new Date() },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     res.status(200).json({
@@ -350,7 +380,7 @@ const updateLeadStatus = async (req, res) => {
     // Update status
     lead.leadStatus = status;
     lead.lastUpdatedDate = new Date();
-    
+
     if (notes) {
       lead.notes = notes;
     }
@@ -522,7 +552,7 @@ const convertLeadToMember = async (req, res) => {
 
     // Convert lead using the model method
     await lead.convertToMember(memberId);
-    
+
     if (conversionNotes) {
       lead.conversionNotes = conversionNotes;
       await lead.save();
@@ -727,7 +757,7 @@ const bulkDeleteLeads = async (req, res) => {
 
     await Lead.updateMany(
       { _id: { $in: leadIds } },
-      { isDeleted: true, deletedAt: new Date() }
+      { isDeleted: true, deletedAt: new Date() },
     );
 
     res.status(200).json({
@@ -767,7 +797,7 @@ const bulkUpdateLeadStatus = async (req, res) => {
 
     await Lead.updateMany(
       { _id: { $in: leadIds } },
-      { leadStatus: status, lastUpdatedDate: new Date() }
+      { leadStatus: status, lastUpdatedDate: new Date() },
     );
 
     res.status(200).json({

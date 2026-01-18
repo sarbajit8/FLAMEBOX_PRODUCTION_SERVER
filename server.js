@@ -70,11 +70,11 @@ app.use(
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
     name: "connect.sid", // Explicitly set session cookie name
-  })
+  }),
 );
 console.log("✅ Session middleware configured with MongoDB store");
 console.log(
-  "🍪 Cookie settings: { secure: false, sameSite: 'lax', httpOnly: true }"
+  "🍪 Cookie settings: { secure: false, sameSite: 'lax', httpOnly: true }",
 );
 
 // ✅ Conditional Logging middleware
@@ -128,7 +128,7 @@ app.use("/api/auth/trainer", trainerRoutes);
 app.use("/public", express.static(path.join(__dirname, "./public")));
 app.use(
   "/templates",
-  express.static(path.join(__dirname, "./public/templates"))
+  express.static(path.join(__dirname, "./public/templates")),
 );
 app.use("/guides", express.static(path.join(__dirname, "./public/guides")));
 

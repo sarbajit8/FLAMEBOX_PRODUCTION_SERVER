@@ -121,12 +121,12 @@ const leadSchema = new mongoose.Schema(
     budgetRange: {
       type: String,
       enum: [
-        "Under $500",
-        "$500-$800",
-        "$800-$1000",
-        "$1000-$1500",
-        "$1500-$2000",
-        "$2000+",
+        "Under 500",
+        "500-800",
+        "800-1000",
+        "1000-1500",
+        "1500-2000",
+        "2000+",
         "Not Disclosed",
       ],
       default: "Not Disclosed",
@@ -365,7 +365,7 @@ const leadSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // ============================================
