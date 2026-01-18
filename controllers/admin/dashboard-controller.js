@@ -9,10 +9,10 @@ const getDashboardStatistics = async (req, res) => {
   try {
     console.log("📊 Fetching dashboard statistics...");
 
-    // Get total members count
+    // Get total members count (Packages Sold)
     const totalMembers = await Member.countDocuments({ isDeleted: false });
 
-    // Get payment statistics
+    // Get payment statistics from Members
     const paymentStats = await Member.aggregate([
       { $match: { isDeleted: false } },
       {
@@ -24,9 +24,32 @@ const getDashboardStatistics = async (req, res) => {
       },
     ]);
 
-    const totalPaid = paymentStats.length > 0 ? paymentStats[0].totalPaid : 0;
-    const totalPending =
+    const memberTotalPaid =
+      paymentStats.length > 0 ? paymentStats[0].totalPaid : 0;
+    const memberTotalPending =
       paymentStats.length > 0 ? paymentStats[0].totalPending : 0;
+
+    // Get payment statistics from Payment History
+    const paymentHistoryStats = await PaymentHistory.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $group: {
+          _id: "$paymentStatus",
+          totalAmount: { $sum: "$finalAmount" },
+        },
+      },
+    ]);
+
+    // Calculate totals from payment history
+    const historyPaidAmount =
+      paymentHistoryStats.find((s) => s._id === "Paid")?.totalAmount || 0;
+    const historyPendingAmount =
+      paymentHistoryStats.find((s) => s._id === "Pending")?.totalAmount || 0;
+
+    // Combine Member and Payment History data
+    const totalPaid = memberTotalPaid + historyPaidAmount;
+    const totalPending = memberTotalPending + historyPendingAmount;
+    const totalRevenue = totalPaid + totalPending;
 
     // Get total payment reports count
     const totalReports = await PaymentHistory.countDocuments({
@@ -35,8 +58,13 @@ const getDashboardStatistics = async (req, res) => {
 
     console.log("✅ Dashboard statistics calculated:", {
       totalMembers,
+      memberTotalPaid,
+      memberTotalPending,
+      historyPaidAmount,
+      historyPendingAmount,
       totalPaid,
       totalPending,
+      totalRevenue,
       totalReports,
     });
 
@@ -46,7 +74,7 @@ const getDashboardStatistics = async (req, res) => {
         totalMembers,
         totalPaid,
         totalPending,
-        totalRevenue: totalPaid + totalPending,
+        totalRevenue,
         totalReports,
       },
     });
