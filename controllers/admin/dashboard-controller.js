@@ -8,13 +8,27 @@ const Lead = require("../../models/admin/Leads");
 const getDashboardStatistics = async (req, res) => {
   try {
     console.log("📊 Fetching dashboard statistics...");
+    const { start, end } = req.query;
+
+    // Build date filter if dates are provided
+    let dateFilter = { isDeleted: false };
+    if (start && end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      endDate.setHours(23, 59, 59, 999); // Include entire end day
+
+      dateFilter.joiningDate = {
+        $gte: startDate,
+        $lte: endDate,
+      };
+    }
 
     // Get total members count (Packages Sold)
-    const totalMembers = await Member.countDocuments({ isDeleted: false });
+    const totalMembers = await Member.countDocuments(dateFilter);
 
     // Get payment statistics from Members
     const paymentStats = await Member.aggregate([
-      { $match: { isDeleted: false } },
+      { $match: dateFilter },
       {
         $group: {
           _id: null,
@@ -29,9 +43,22 @@ const getDashboardStatistics = async (req, res) => {
     const memberTotalPending =
       paymentStats.length > 0 ? paymentStats[0].totalPending : 0;
 
+    // Build date filter for payment history
+    let paymentHistoryDateFilter = { isDeleted: false };
+    if (start && end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      endDate.setHours(23, 59, 59, 999);
+
+      paymentHistoryDateFilter.paymentDate = {
+        $gte: startDate,
+        $lte: endDate,
+      };
+    }
+
     // Get payment statistics from Payment History
     const paymentHistoryStats = await PaymentHistory.aggregate([
-      { $match: { isDeleted: false } },
+      { $match: paymentHistoryDateFilter },
       {
         $group: {
           _id: "$paymentStatus",
@@ -52,9 +79,9 @@ const getDashboardStatistics = async (req, res) => {
     const totalRevenue = totalPaid + totalPending;
 
     // Get total payment reports count
-    const totalReports = await PaymentHistory.countDocuments({
-      isDeleted: false,
-    });
+    const totalReports = await PaymentHistory.countDocuments(
+      paymentHistoryDateFilter,
+    );
 
     console.log("✅ Dashboard statistics calculated:", {
       totalMembers,

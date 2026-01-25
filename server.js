@@ -105,6 +105,7 @@ const leadsRoutes = require("./routes/admin/leads-routes");
 const dashboardRoutes = require("./routes/admin/dashboard-routes");
 const scheduleRoutes = require("./routes/admin/schedule-routes");
 const paymentHistoryRoutes = require("./routes/admin/paymenthistory-routes");
+const groupsRoutes = require("./routes/admin/groups-routes");
 
 // New role-based authentication routes
 const usersRoutes = require("./routes/auth/users-routes");
@@ -119,6 +120,7 @@ app.use("/api/package", packageFeaturesRoutes);
 app.use("/api", employeeRoutes);
 app.use("/api/admin/schedule", scheduleRoutes);
 app.use("/api/admin/payment-history", paymentHistoryRoutes);
+app.use("/api/admin/groups", groupsRoutes);
 
 // Role-based authentication routes
 app.use("/api/auth/users", usersRoutes);
@@ -202,6 +204,10 @@ mongoose
         initPackageExpiryCron,
       } = require("./cron/packageExpiryReminders");
       initPackageExpiryCron();
+
+      // Start birthday reminder cron job
+      const { startBirthdayReminderCron } = require("./cron/birthdayReminders");
+      startBirthdayReminderCron();
     });
   })
   .catch((err) => {

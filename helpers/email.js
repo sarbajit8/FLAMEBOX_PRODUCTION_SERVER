@@ -19,7 +19,7 @@ if (process.env.ENABLE_SMS_NOTIFICATIONS === "true") {
   try {
     twilioClient = twilio(
       process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
+      process.env.TWILIO_AUTH_TOKEN,
     );
     console.log("✅ Twilio SMS client initialized");
   } catch (error) {
@@ -510,8 +510,8 @@ const generateInvoicePDF = (paymentDetails) => {
         paymentStatus === "Paid"
           ? "#28a745"
           : paymentStatus === "Pending"
-          ? "#ffc107"
-          : "#17a2b8";
+            ? "#ffc107"
+            : "#17a2b8";
       doc
         .rect(50, startY + 85, 100, 25)
         .fillAndStroke(statusColor, statusColor);
@@ -576,7 +576,7 @@ const generateInvoicePDF = (paymentDetails) => {
             `🎉 Congratulations! Your payment is complete with no outstanding balance. Thank you for being a valued member of FLAMEBOX!`,
             60,
             startY + 285,
-            { width: 475, align: "left" }
+            { width: 475, align: "left" },
           );
       } else if (totalPending > 0) {
         doc.rect(50, startY + 270, 495, 50).fillAndStroke("#fff3cd", "#ffc107");
@@ -585,11 +585,11 @@ const generateInvoicePDF = (paymentDetails) => {
           .fillColor("#856404")
           .text(
             `Note: You have a remaining balance of ₹${totalPending.toLocaleString(
-              "en-IN"
+              "en-IN",
             )}. Please clear your dues at the earliest.`,
             60,
             startY + 285,
-            { width: 475, align: "left" }
+            { width: 475, align: "left" },
           );
       }
 
@@ -622,7 +622,7 @@ const generateInvoicePDF = (paymentDetails) => {
           "This is a computer-generated invoice and does not require a signature.",
           50,
           footerY + 70,
-          { align: "center" }
+          { align: "center" },
         );
 
       doc.end();
@@ -927,7 +927,7 @@ const sendPaymentReceiptEmail = async (email, paymentDetails) => {
               <div class="amount-highlight">
                 <div class="amount-label">Amount Paid</div>
                 <div class="amount-value">₹${amountPaid.toLocaleString(
-                  "en-IN"
+                  "en-IN",
                 )}</div>
               </div>
 
@@ -937,14 +937,14 @@ const sendPaymentReceiptEmail = async (email, paymentDetails) => {
                 <div class="summary-card">
                   <div class="summary-label">Total Paid</div>
                   <div class="summary-value paid">₹${totalPaid.toLocaleString(
-                    "en-IN"
+                    "en-IN",
                   )}</div>
                 </div>
                 
                 <div class="summary-card">
                   <div class="summary-label">Balance Due</div>
                   <div class="summary-value pending">₹${totalPending.toLocaleString(
-                    "en-IN"
+                    "en-IN",
                   )}</div>
                 </div>
               </div>
@@ -954,7 +954,7 @@ const sendPaymentReceiptEmail = async (email, paymentDetails) => {
                   ? `
               <div class="info-box">
                 <p><strong>📌 Note:</strong> You have a remaining balance of <strong>₹${totalPending.toLocaleString(
-                  "en-IN"
+                  "en-IN",
                 )}</strong>.</p>
                 <p>Please clear your dues at the earliest to continue enjoying our services without interruption.</p>
               </div>
@@ -1197,7 +1197,7 @@ const sendEventReminderEmail = async (email, eventDetails) => {
                 </div>
               `
                   : is24Hours
-                  ? `
+                    ? `
                 <div class="info-section">
                   <div class="info-title">🎉 Special Hours</div>
                   <div class="info-text">
@@ -1205,7 +1205,7 @@ const sendEventReminderEmail = async (email, eventDetails) => {
                   </div>
                 </div>
               `
-                  : `
+                    : `
                 <div class="info-section">
                   <div class="info-title">🕐 Modified Hours</div>
                   <div class="info-text">
@@ -1243,7 +1243,7 @@ const sendEventReminderEmail = async (email, eventDetails) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(
-      `✅ Event reminder email sent to ${email} (Message ID: ${info.messageId})`
+      `✅ Event reminder email sent to ${email} (Message ID: ${info.messageId})`,
     );
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -1261,7 +1261,7 @@ const sendEventReminderSMS = async (
   open,
   is24Hours,
   startTime,
-  endTime
+  endTime,
 ) => {
   try {
     if (!twilioClient) {
@@ -1310,7 +1310,7 @@ const sendEventReminderSMS = async (
     });
 
     console.log(
-      `✅ Event reminder SMS sent to ${formattedPhone} (SID: ${smsResult.sid})`
+      `✅ Event reminder SMS sent to ${formattedPhone} (SID: ${smsResult.sid})`,
     );
     return { success: true, sid: smsResult.sid };
   } catch (error) {
@@ -1322,7 +1322,7 @@ const sendEventReminderSMS = async (
 // Send package expiry reminder email
 const sendPackageExpiryEmail = async (
   email,
-  { memberName, packageName, endDate, daysLeft }
+  { memberName, packageName, endDate, daysLeft },
 ) => {
   try {
     const expiryDate = new Date(endDate).toLocaleDateString("en-US", {
@@ -1468,8 +1468,8 @@ const sendPackageExpiryEmail = async (
                 <div class="package-detail">
                   <span class="label">⏰ Days Left:</span>
                   <span class="value" style="color: ${urgencyColor}; font-weight: bold;">${daysLeft} ${
-        daysLeft === 1 ? "day" : "days"
-      }</span>
+                    daysLeft === 1 ? "day" : "days"
+                  }</span>
                 </div>
               </div>
               
@@ -1499,7 +1499,7 @@ const sendPackageExpiryEmail = async (
 
     const info = await transporter.sendMail(mailOptions);
     console.log(
-      `✅ Package expiry email sent to ${email} (Message ID: ${info.messageId})`
+      `✅ Package expiry email sent to ${email} (Message ID: ${info.messageId})`,
     );
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -1514,7 +1514,7 @@ const sendPackageExpirySMS = async (
   memberName,
   packageName,
   endDate,
-  daysLeft
+  daysLeft,
 ) => {
   try {
     if (!twilioClient) {
@@ -1558,7 +1558,7 @@ const sendPackageExpirySMS = async (
     });
 
     console.log(
-      `✅ Package expiry SMS sent to ${formattedPhone} (SID: ${smsResult.sid})`
+      `✅ Package expiry SMS sent to ${formattedPhone} (SID: ${smsResult.sid})`,
     );
     return { success: true, sid: smsResult.sid };
   } catch (error) {
@@ -1710,7 +1710,7 @@ const sendPackageRenewalEmail = async (email, renewalDetails) => {
                 <div class="info-row">
                   <span class="info-label">Start Date:</span>
                   <span class="info-value">${new Date(
-                    startDate
+                    startDate,
                   ).toLocaleDateString("en-IN", {
                     day: "2-digit",
                     month: "long",
@@ -1721,7 +1721,7 @@ const sendPackageRenewalEmail = async (email, renewalDetails) => {
                 <div class="info-row">
                   <span class="info-label">End Date:</span>
                   <span class="info-value">${new Date(
-                    endDate
+                    endDate,
                   ).toLocaleDateString("en-IN", {
                     day: "2-digit",
                     month: "long",
@@ -1732,14 +1732,14 @@ const sendPackageRenewalEmail = async (email, renewalDetails) => {
                 <div class="info-row">
                   <span class="info-label">Package Amount:</span>
                   <span class="info-value">₹${parseFloat(amount).toFixed(
-                    2
+                    2,
                   )}</span>
                 </div>
                 
                 <div class="info-row">
                   <span class="info-label">Amount Paid:</span>
                   <span class="info-value">₹${parseFloat(amountPaid).toFixed(
-                    2
+                    2,
                   )}</span>
                 </div>
                 
@@ -1751,7 +1751,7 @@ const sendPackageRenewalEmail = async (email, renewalDetails) => {
                 <div class="info-row">
                   <span class="info-label">Payment Date:</span>
                   <span class="info-value">${new Date(
-                    paymentDate
+                    paymentDate,
                   ).toLocaleDateString("en-IN", {
                     day: "2-digit",
                     month: "long",
@@ -1786,7 +1786,7 @@ const sendPackageRenewalEmail = async (email, renewalDetails) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(
-      `✅ Package renewal email sent to ${email} (Message ID: ${info.messageId})`
+      `✅ Package renewal email sent to ${email} (Message ID: ${info.messageId})`,
     );
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -1947,7 +1947,7 @@ const sendPackageExtensionEmail = async (email, extensionDetails) => {
                 <div class="info-row">
                   <span class="info-label">New End Date:</span>
                   <span class="info-value">${new Date(
-                    newEndDate
+                    newEndDate,
                   ).toLocaleDateString("en-IN", {
                     day: "2-digit",
                     month: "long",
@@ -1961,14 +1961,14 @@ const sendPackageExtensionEmail = async (email, extensionDetails) => {
                 <div class="info-row">
                   <span class="info-label">Extra Amount:</span>
                   <span class="info-value">₹${parseFloat(extraAmount).toFixed(
-                    2
+                    2,
                   )}</span>
                 </div>
                 
                 <div class="info-row">
                   <span class="info-label">Amount Paid:</span>
                   <span class="info-value">₹${parseFloat(
-                    amountPaid || 0
+                    amountPaid || 0,
                   ).toFixed(2)}</span>
                 </div>
                 `
@@ -2002,7 +2002,7 @@ const sendPackageExtensionEmail = async (email, extensionDetails) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(
-      `✅ Package extension email sent to ${email} (Message ID: ${info.messageId})`
+      `✅ Package extension email sent to ${email} (Message ID: ${info.messageId})`,
     );
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -2161,7 +2161,7 @@ const sendPackageFreezeEmail = async (email, freezeDetails) => {
                 <div class="info-row">
                   <span class="info-label">New End Date:</span>
                   <span class="info-value">${new Date(
-                    newEndDate
+                    newEndDate,
                   ).toLocaleDateString("en-IN", {
                     day: "2-digit",
                     month: "long",
@@ -2204,11 +2204,196 @@ const sendPackageFreezeEmail = async (email, freezeDetails) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(
-      `✅ Package freeze email sent to ${email} (Message ID: ${info.messageId})`
+      `✅ Package freeze email sent to ${email} (Message ID: ${info.messageId})`,
     );
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error("❌ Error sending package freeze email:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Send Birthday Greeting Email
+const sendBirthdayEmail = async (email, memberName) => {
+  try {
+    const mailOptions = {
+      from: {
+        name: "FLAMEBOX",
+        address: process.env.EMAIL_FROM_ADDRESS,
+      },
+      to: email,
+      subject: "🎉 Happy Birthday! - FLAMEBOX",
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              background-color: #f4f4f4;
+              margin: 0;
+              padding: 0;
+            }
+            .container {
+              max-width: 600px;
+              margin: 20px auto;
+              background-color: #ffffff;
+              border-radius: 10px;
+              overflow: hidden;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+              background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+              color: white;
+              padding: 40px 30px;
+              text-align: center;
+              position: relative;
+              overflow: hidden;
+            }
+            .header::before {
+              content: "🎉 🎂 🎈";
+              position: absolute;
+              font-size: 48px;
+              opacity: 0.2;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+            }
+            .header-content {
+              position: relative;
+              z-index: 1;
+            }
+            .header h1 {
+              margin: 0 0 10px 0;
+              font-size: 36px;
+              font-weight: bold;
+            }
+            .header p {
+              margin: 0;
+              font-size: 18px;
+            }
+            .content {
+              padding: 40px 30px;
+              text-align: center;
+            }
+            .birthday-message {
+              font-size: 24px;
+              font-weight: bold;
+              color: #333;
+              margin-bottom: 20px;
+              line-height: 1.4;
+            }
+            .member-name {
+              color: #dc2626;
+              font-weight: bold;
+            }
+            .greeting-text {
+              color: #666;
+              font-size: 16px;
+              line-height: 1.6;
+              margin: 20px 0;
+            }
+            .special-offer {
+              background-color: #fef3c7;
+              border-left: 4px solid #f59e0b;
+              padding: 20px;
+              border-radius: 5px;
+              margin: 30px 0;
+              text-align: left;
+            }
+            .special-offer h3 {
+              margin-top: 0;
+              color: #d97706;
+            }
+            .special-offer p {
+              margin: 10px 0;
+              color: #666;
+            }
+            .cta-button {
+              display: inline-block;
+              background-color: #dc2626;
+              color: white;
+              padding: 12px 30px;
+              text-decoration: none;
+              border-radius: 5px;
+              margin: 20px 0;
+              font-weight: bold;
+              font-size: 16px;
+              transition: background-color 0.3s ease;
+            }
+            .cta-button:hover {
+              background-color: #991b1b;
+            }
+            .footer {
+              background-color: #f9fafb;
+              padding: 20px 30px;
+              text-align: center;
+              border-top: 1px solid #e5e7eb;
+              color: #999;
+              font-size: 12px;
+            }
+            .emoji {
+              font-size: 20px;
+              margin: 0 5px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="header-content">
+                <h1>Happy Birthday! <span class="emoji">🎉</span></h1>
+                <p>Celebrate Your Special Day with FLAMEBOX</p>
+              </div>
+            </div>
+
+            <div class="content">
+              <div class="birthday-message">
+                Dear <span class="member-name">${memberName}</span>,
+                <br>
+                🎂 Today is YOUR special day! 🎂
+              </div>
+
+              <p class="greeting-text">
+                On this wonderful day, we want to extend our warmest wishes to you. Thank you for being a valued member of the FLAMEBOX community. Your dedication and commitment inspire us every day.
+              </p>
+
+              <div class="special-offer">
+                <h3><span class="emoji">🎁</span> Special Birthday Offer!</h3>
+                <p>As a token of our appreciation, enjoy <strong>a special surprise</strong> on your next visit to FLAMEBOX!</p>
+                <p style="margin-bottom: 0; font-weight: bold; color: #d97706;">Contact our team for exclusive birthday benefits</p>
+              </div>
+
+              <p class="greeting-text">
+                We wish you a year filled with health, happiness, and great achievements. May this year bring you new opportunities and countless memorable moments!
+              </p>
+
+              <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                <span class="emoji">💪</span> Keep up the great fitness journey with us!
+              </p>
+            </div>
+
+            <div class="footer">
+              <p>
+                This is an automated birthday greeting from FLAMEBOX. 
+                <br>
+                © 2026 FLAMEBOX. All rights reserved.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(
+      `✅ Birthday email sent to ${email} for ${memberName} (Message ID: ${info.messageId})`,
+    );
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("❌ Error sending birthday email:", error);
     return { success: false, error: error.message };
   }
 };
@@ -2225,4 +2410,5 @@ module.exports = {
   sendPackageRenewalEmail,
   sendPackageExtensionEmail,
   sendPackageFreezeEmail,
+  sendBirthdayEmail,
 };
